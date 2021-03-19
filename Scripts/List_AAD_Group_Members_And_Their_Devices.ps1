@@ -1,7 +1,6 @@
 #Connect to Azure
 Connect-AzureAD
 
-$PSCommandPath
 #Group_File_GeneralReport
 $Report_Group_File = ".\Azure Active Directory\GroupReport\"
 #Report_Intune_Devices
