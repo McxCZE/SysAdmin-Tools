@@ -1,1 +1,88 @@
+$VMware_Modules = Get-Module VMware* -ListAvailable | Select-Object Name
 
+Foreach ($VMware_Module in $VMware_Modules) {
+    Import-Module $VMware_Module.Name
+}
+
+#Maximalni pocet soubeznych Jobu na mazani snapshotu
+$maxJobs = 5
+#Vygenerovany soubor pro e-mail
+$outfile = "snapshot_removal_list.htm"
+#Report po odstraneni snapshotu
+$report_path = "C:\MyAwesomeReports"
+#Umisteni reportu
+$report_file = $report_path + $outfile
+
+$head = @("
+<style>
+BODY{background-color:white;}
+TABLE{border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;}
+TH{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color:orange}
+TD{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color:coral}
+</style>
+")
+
+# SMTP
+$smtpServer = "mail.example.com" 
+$strFrom = "VIAdmin@example.com"
+$strTo = "administrator@example.com" 
+$snapjmeno = "Before_Update removed snapshots"
+$Datum = Get-Date
+$DatumShort = $Datum.ToShortDateString()
+$strSubject = $snapjmeno  + " " + $DatumShort
+$strMail = "<H2><u>" + $strSubject + "</u></H2>"
+
+
+Connect-VIServer -Server "vSphere.example.com"
+
+$All_VMs = Get-VM -Name *
+
+$myObj = @()
+$Snap_Remove = @()
+
+Foreach ($VM in $All_VMs) {
+    $Snapshot = Get-Snapshot -Name "*Before_Update*" -VM $VM
+
+    If ($Snapshot.Name -like "*Before_Update*") {
+        $myObj = "" | Select-Object VM, Snapshot, Created, Description
+	    $myObj.VM = $VM
+	    $myObj.Snapshot = $Snapshot.Name
+	    $myObj.Created = $Snapshot.Created
+	    $myObj.Description = $Snapshot.Description
+	    $Snap_Remove += $myObj
+
+        Get-VM | Get-Snapshot -Name "*Before_Update*" | ForEach-Object -Process {
+           Remove-Snapshot -Snapshot $_ -Confirm:$false -RunAsync
+           $current = Get-Task | Where-Object {$_.Name -eq 'RemoveSnapshot_Task' -and 'Running','Queued' -contains $_.State}
+           while ($current.count -gt $maxJobs) {
+              Start-Sleep 5
+              $current = Get-Task | Where-Object {$_.Name -eq 'RemoveSnapshot_Task' -and 'Running','Queued' -contains $_.State}
+           }
+        }
+    }
+}
+
+$Snap_Remove | Sort-Object VM | ConvertTo-HTML -Head $head -Body $strMail | Out-File -FilePath $report_file -Force
+
+$Prilohy = Get-ChildItem -Path $report_path
+$msg = new-object Net.Mail.MailMessage
+
+Foreach ($priloha in $Prilohy)
+{
+if  ($priloha.fullname -match $outfile){
+	$att = new-object Net.Mail.Attachment($priloha.fullname)
+	$msg.Attachments.Add($att)}
+}
+
+$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+$msg.From = $strFrom
+$msg.To.Add($strTo)
+$msg.Subject = $strSubject
+$msg.IsBodyHtml = 1
+$msg.Body = Get-Content $report_file
+$msg.Headers.Add("message-id", "<3BD50098E401463AA228377848493927-1>") #Adding Bell icon for Outlook
+$smtp.Send($msg)
+
+Disconnect-VIServer -Server "Veronika.example.com" -Confirm:$false
+
+#Modified by Milan C., updated VIM modules. 
