@@ -83,6 +83,6 @@ $msg.Body = Get-Content $report_file
 $msg.Headers.Add("message-id", "<3BD50098E401463AA228377848493927-1>") #Adding Bell icon for Outlook
 $smtp.Send($msg)
 
-Disconnect-VIServer -Server "Veronika.example.com" -Confirm:$false
+Disconnect-VIServer -Server "vSphere.example.com" -Confirm:$false
 
 #Modified by Milan C., updated VIM modules. 
